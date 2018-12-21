@@ -1,0 +1,4 @@
+[[package]]
+name = "compressed_log_sink"
+version = "0.1.0"
+
