@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate serde_derive;
 use actix::*;
 use actix_web::{server, ws, App};
@@ -54,17 +53,14 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Ws {
                     let _ = self.write.flush();
                 }
             }
-            _ => {
-                println!("Unknown message");
-                ()
-            }
+            _ => println!("Unknown message"),
         }
     }
 }
 
 use docopt::Docopt;
 
-const USAGE: &'static str = r#"
+const USAGE: &str = r#"
 Compressed log sink.
 
 Usage:
