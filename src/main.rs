@@ -1,7 +1,11 @@
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 extern crate serde_derive;
 use actix::*;
 use actix_web::{server, ws, App};
 use lz4::Decoder;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::fs::OpenOptions;
 use std::io;
 
@@ -32,9 +36,13 @@ impl Actor for Ws {
 impl StreamHandler<ws::Message, ws::ProtocolError> for Ws {
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
         match msg {
-            ws::Message::Ping(msg) => ctx.pong(&msg),
+            ws::Message::Ping(msg) => {
+                debug!("Got ping, responding with pong");
+                ctx.pong(&msg)
+            }
             ws::Message::Text(_text) => (),
             ws::Message::Binary(mut bin) => {
+                debug!("Got binary, dumping");
                 let bytes = bin.take().to_vec();
                 let mut decoder = Decoder::new(&bytes[..]).expect("Unable to create decoder");
                 let mut output = Vec::new();
@@ -64,7 +72,7 @@ const USAGE: &str = r#"
 Compressed log sink.
 
 Usage:
-  compressed_log_sink [ --bind=<address> ] [ --output=<stream> ]
+  compressed_log_sink [ --bind=<address> ] [ --output=<stream> ] --cert=<cert-path> --key=<key-path>
   compressed_log_sink (-h | --help)
   compressed_log_sink --version
 
@@ -72,21 +80,33 @@ Options:
   -h --help     Show this screen.
   --version     Show version.
   --bind=<address>  Bind to address [default: 0.0.0.0:9999].
-  --output=<stream>  Output stream [default: -].
+  --output=<stream>  Output stream [default: stdout].
+  --cert=<path>     Https certificate file.
+  --key=<path>     Https keyfile.
 "#;
 
 fn main() {
+    env_logger::init();
+    info!("Compressed log sink starting!");
     let args = Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
     let output = args.get_str("--output").to_string();
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    builder
+        .set_private_key_file(args.get_str("--key"), SslFiletype::PEM)
+        .expect("Invalid ssl private key! Please use PEM format");
+    builder
+        .set_certificate_file(args.get_str("--cert"), SslFiletype::PEM)
+        .expect("Invalid ssl certificate! Please use PEM format");
+
     server::new(move || {
         // Without this clone it fails miserably in nested closures
         let output = output.clone();
         App::new()
             .resource("/sink/", move |r| {
                 r.f(move |req| {
-                    println!("Something happened!");
+                    info!("Somone hit sink!");
 
                     // Create a stream with given options
                     let stream: Box<io::Write> = if output.clone() == "-" {
@@ -111,7 +131,7 @@ fn main() {
             })
             .finish()
     })
-    .bind(args.get_str("--bind"))
+    .bind_ssl(args.get_str("--bind"), builder)
     .unwrap_or_else(|_| panic!("Unable to bind to {}", args.get_str("--bind")))
     .run();
 }
