@@ -97,7 +97,7 @@ fn main() {
         .set_private_key_file(args.get_str("--key"), SslFiletype::PEM)
         .expect("Invalid ssl private key! Please use PEM format");
     builder
-        .set_certificate_file(args.get_str("--cert"), SslFiletype::PEM)
+        .set_certificate_chain_file(args.get_str("--cert"))
         .expect("Invalid ssl certificate! Please use PEM format");
 
     server::new(move || {
