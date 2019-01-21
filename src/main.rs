@@ -81,7 +81,7 @@ Options:
   --version     Show version.
   --bind=<address>  Bind to address [default: 0.0.0.0:9999].
   --output=<stream>  Output stream [default: stdout].
-  --cert=<path>     Https certificate file.
+  --cert=<path>     Https certificate chain.
   --key=<path>     Https keyfile.
 "#;
 
