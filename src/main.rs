@@ -4,8 +4,6 @@ extern crate env_logger;
 extern crate serde_derive;
 use actix::*;
 use actix_web::{server, ws, App};
-use lz4::Decoder;
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::fs::OpenOptions;
 use std::io;
 
@@ -44,22 +42,12 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for Ws {
             ws::Message::Binary(mut bin) => {
                 debug!("Got binary, dumping");
                 let bytes = bin.take().to_vec();
-                let mut decoder = Decoder::new(&bytes[..]).expect("Unable to create decoder");
-                let mut output = Vec::new();
-                // Extract data from decoder
-                io::copy(&mut decoder, &mut output)
-                    .expect("Unable to copy data from decoder to output buffer");
-
                 // Don't fail if the data can't be written to the output stream
-                println!("Write data to a stream... {} bytes", output.len());
-                if let Err(err) = self.write.write(&output) {
-                    eprintln!("Unable to write data to a stream: {}", err);
-                } else {
-                    // Otherwise flush the write.Actor
-                    // This should make multiple opened file streams
-                    // to not overleap their writes with others.
-                    let _ = self.write.flush();
-                }
+                println!("Write data to a stream... {} bytes", bytes.len());
+                self.write
+                    .write(&bytes)
+                    .expect("Unable to write data to a stream");
+                self.write.flush().expect("Unable to flush");
             }
             _ => println!("Unknown message"),
         }
@@ -92,14 +80,6 @@ fn main() {
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
     let output = args.get_str("--output").to_string();
-    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    builder
-        .set_private_key_file(args.get_str("--key"), SslFiletype::PEM)
-        .expect("Invalid ssl private key! Please use PEM format");
-    builder
-        .set_certificate_chain_file(args.get_str("--cert"))
-        .expect("Invalid ssl certificate! Please use PEM format");
-
     server::new(move || {
         // Without this clone it fails miserably in nested closures
         let output = output.clone();
@@ -131,7 +111,7 @@ fn main() {
             })
             .finish()
     })
-    .bind_ssl(args.get_str("--bind"), builder)
+    .bind(args.get_str("--bind"))
     .unwrap_or_else(|_| panic!("Unable to bind to {}", args.get_str("--bind")))
     .run();
 }
